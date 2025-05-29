@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "54429953328",
+    "project_id": "todamoon-app",
+    "storage_bucket": "todamoon-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:54429953328:android:d13b7d47f5cacca9df6cf5",
+        "android_client_info": {
+          "package_name": "com.example.todamoon_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCuxybMm_NOda_mCWxPt6p7XGNU9Nax8IM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
