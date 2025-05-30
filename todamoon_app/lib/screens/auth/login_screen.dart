@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:awesome_dialog/awesome_dialog.dart';
-import 'package:todamoon_app/screens/dashboard.dart.dart';
+import 'package:todamoon_app/screens/auth/register_screen.dart';
+import 'package:todamoon_app/screens/nav/nav_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -117,6 +118,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+                    TextButton(
+                      onPressed:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => RegisterScreen()),
+                          ),
+                      child: Text(
+                        'Dont have an account? Register',
+                        style: TextStyle(color: Colors.lightBlueAccent),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -199,7 +210,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (document.exists) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => DashboadScreen(uid: userId)),
+          MaterialPageRoute(builder: (_) => MainNavScreen(uid: userId)),
         );
       } else {
         showErrorDialog('No user data found in Firestore');

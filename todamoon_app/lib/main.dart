@@ -3,9 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:todamoon_app/firebase_options.dart';
-import 'package:todamoon_app/screens/dashboard.dart.dart';
 import 'package:todamoon_app/screens/first_screen.dart';
 import 'package:todamoon_app/screens/home.dart';
+import 'package:todamoon_app/screens/nav/nav_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +29,6 @@ class TodaMoon extends StatelessWidget {
           if (snapshot.hasData) {
             var uid = snapshot.data?.uid ?? '';
             print(uid);
-            //check user is client / establishment
             return FutureBuilder(
               future:
                   FirebaseFirestore.instance.collection('users').doc(uid).get(),
@@ -39,7 +38,7 @@ class TodaMoon extends StatelessWidget {
                 }
                 var data = docSnapshot.data;
                 if (data != null) {
-                  return DashboadScreen(uid: uid); //data['firstName']
+                  return MainNavScreen(uid: uid); //data['firstName']
                 } else {
                   return HomeScreen();
                 }

@@ -185,7 +185,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const Gap(16),
 
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => LoginScreen()),
+                          ),
                       child: Text(
                         'Already have an account? Login',
                         style: TextStyle(color: Colors.lightBlueAccent),
