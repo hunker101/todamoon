@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/modules_data.dart';
 import 'module_detail_page.dart';
 
@@ -12,7 +13,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
-  Map<String, dynamic> userProgress = {};
+  Map<String, int> quizScores = {};
+  Map<String, List<String>> lessonProgress = {}; // Track lesson completion
   bool _isLoading = true;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -27,7 +29,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    loadProgress();
+    _loadProgress();
   }
 
   @override
@@ -36,59 +38,133 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  Future<void> loadProgress() async {
+  Future<void> _loadProgress() async {
     try {
-      final doc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(widget.uid)
-              .get();
-      setState(() {
-        userProgress = doc.data()?['progress'] ?? {};
-        _isLoading = false;
-      });
-      _animationController.forward();
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? widget.uid;
+      
+      // Load quiz scores
+      final quizSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('quiz_progress')
+          .get();
+      
+      Map<String, int> scores = {};
+      for (var doc in quizSnapshot.docs) {
+        scores[doc.id] = doc['score'] as int? ?? 0;
+      }
+      
+      // Load lesson progress
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      
+      Map<String, List<String>> progress = {};
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        final progressData = data?['progress'] as Map<String, dynamic>? ?? {};
+        
+        for (var entry in progressData.entries) {
+          progress[entry.key] = List<String>.from(entry.value ?? []);
+        }
+      }
+      
+      // Check if widget is still mounted before calling setState
+      if (mounted) {
+        setState(() {
+          quizScores = scores;
+          lessonProgress = progress;
+          _isLoading = false;
+        });
+        _animationController.forward();
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
-      _animationController.forward();
+      debugPrint('Error loading progress: $e');
+      // Check if widget is still mounted before calling setState
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _animationController.forward();
+      }
     }
   }
 
-  int get totalCompletedLessons {
-    int total = 0;
-    for (final module in localModules) {
-      final completed = userProgress[module.id] ?? [];
-      total += (completed as List).length;
-    }
-    return total;
+  int get completedQuizzes {
+    return quizScores.length;
   }
 
-  int get totalLessons {
-    return localModules.fold(0, (sum, module) => sum + module.lessons.length);
+  int get totalModules {
+    return modules.length;
   }
 
   double get overallProgress {
-    if (totalLessons == 0) return 0.0;
-    return totalCompletedLessons / totalLessons;
+    if (totalModules == 0) return 0.0;
+    return completedQuizzes / totalModules;
+  }
+
+  // Get module progress based on completed lessons
+  double _getModuleProgress(Module module) {
+    final completedLessons = lessonProgress[module.id] ?? [];
+    if (module.lessons.isEmpty) return 0.0;
+    return completedLessons.length / module.lessons.length;
   }
 
   // Helper methods for status display
-  String _getStatusText(int completed, int total) {
-    if (completed == 0) return 'Not Started';
-    if (completed == total) return 'Completed';
-    return 'In Progress';
+  String _getStatusText(Module module) {
+    final progress = _getModuleProgress(module);
+    if (quizScores.containsKey(module.id)) {
+      return 'Completed';
+    } else if (progress > 0) {
+      return 'In Progress';
+    }
+    return 'Not Started';
   }
 
-  Color _getStatusColor(int completed, int total) {
-    if (completed == 0) return Colors.grey;
-    if (completed == total) return Colors.green;
-    return Colors.orange;
+  Color _getStatusColor(Module module) {
+    final progress = _getModuleProgress(module);
+    if (quizScores.containsKey(module.id)) {
+      return Colors.green;
+    } else if (progress > 0) {
+      return Colors.orange;
+    }
+    return Colors.grey;
   }
 
-  IconData _getStatusIcon(int completed, int total) {
-    if (completed == 0) return Icons.play_circle_outline;
-    if (completed == total) return Icons.check_circle;
-    return Icons.timer;
+  IconData _getStatusIcon(Module module) {
+    final progress = _getModuleProgress(module);
+    if (quizScores.containsKey(module.id)) {
+      return Icons.check_circle;
+    } else if (progress > 0) {
+      return Icons.play_circle_filled;
+    }
+    return Icons.play_circle_outline;
+  }
+
+  // Get module image path from assets
+  String _getModuleImagePath(Module module) {
+    // You can customize this logic based on how you've named your assets
+    // Option 1: Use module ID to match asset filename
+    //return 'assets/images/${module.id}.png';
+    
+    // Option 2: If you have a specific mapping, you can use a switch statement:
+    
+    switch (module.id) {
+      case 'introduction':
+        return 'assets/images/introduction.jpeg';
+      case 'bitcoin':
+        return 'assets/images/bitcoin.jpeg';
+      case 'hashing':
+        return 'assets/images/hashing.jpeg';
+        case 'blockchain':
+        return 'assets/images/blockchain.jpeg';
+        case 'altcoins':
+        return 'assets/images/altcoin.jpeg';
+        case 'crypto_exchanges':
+        return 'assets/images/crypto_trading.jpeg';
+      default:
+        return 'assets/images/bg.png';
+    }
+    
   }
 
   Widget _buildWelcomeHeader() {
@@ -196,7 +272,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ),
                   Text(
-                    '$totalCompletedLessons/$totalLessons lessons',
+                    '$completedQuizzes/$totalModules modules',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.9),
                       fontSize: 12,
@@ -216,17 +292,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     int inProgressModules = 0;
     int notStartedModules = 0;
 
-    for (final module in localModules) {
-      final completed = userProgress[module.id] ?? [];
-      final completedLessons = (completed as List).length;
-      final totalLessons = module.lessons.length;
-
-      if (completedLessons == 0) {
-        notStartedModules++;
-      } else if (completedLessons == totalLessons) {
+    for (final module in modules) {
+      if (quizScores.containsKey(module.id)) {
         completedModules++;
-      } else {
+      } else if (_getModuleProgress(module) > 0) {
         inProgressModules++;
+      } else {
+        notStartedModules++;
       }
     }
 
@@ -234,15 +306,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          Expanded(
-            child: _buildStatCard(
-              'Modules',
-              '${localModules.length}',
-              Icons.book,
-              Colors.orange,
-            ),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: _buildStatCard(
               'Completed',
@@ -256,8 +319,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             child: _buildStatCard(
               'In Progress',
               '$inProgressModules',
-              Icons.timer,
+              Icons.play_circle_filled,
               Colors.orange,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              'Not Started',
+              '$notStartedModules',
+              Icons.play_circle_outline,
+              Colors.grey,
             ),
           ),
         ],
@@ -290,35 +362,41 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               fontWeight: FontWeight.bold,
             ),
           ),
-          Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
   }
 
   Widget _buildModuleCard(int index) {
-    final moduleItem = localModules[index];
-    final completed = userProgress[moduleItem.id] ?? [];
-    final completedLessons = (completed as List).length;
-    final totalLessons = moduleItem.lessons.length;
-    final progress = totalLessons > 0 ? completedLessons / totalLessons : 0.0;
-    final isCompleted = completedLessons == totalLessons;
+    final module = modules[index];
+    final isCompleted = quizScores.containsKey(module.id);
+    final score = quizScores[module.id];
+    final progress = _getModuleProgress(module);
+    final completedLessons = lessonProgress[module.id]?.length ?? 0;
 
     return GestureDetector(
       onTap: () async {
         final result = await Navigator.push(
           context,
           MaterialPageRoute(
-            builder:
-                (context) => ModuleDetailPage(
-                  module: moduleItem.toModule(),
-                  uid: widget.uid,
-                ),
+            builder: (context) => ModuleDetailPage(
+              moduleId: module.id,
+              title: module.title,
+              description: module.description,
+            ),
           ),
         );
         // Refresh progress when returning from module detail page
         if (result == true || result == null) {
-          loadProgress();
+          _loadProgress();
         }
       },
       child: Container(
@@ -332,14 +410,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               offset: const Offset(0, 4),
             ),
           ],
-          border:
-              isCompleted
-                  ? Border.all(color: Colors.green.withOpacity(0.5), width: 2)
+          border: isCompleted
+              ? Border.all(color: Colors.green.withOpacity(0.5), width: 2)
+              : progress > 0
+                  ? Border.all(color: Colors.orange.withOpacity(0.5), width: 2)
                   : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, // Added this to prevent overflow
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Header with completion status
             Padding(
@@ -354,19 +433,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(
-                          completedLessons,
-                          totalLessons,
-                        ).withOpacity(0.15),
+                        color: _getStatusColor(module).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        _getStatusText(completedLessons, totalLessons),
+                        _getStatusText(module),
                         style: TextStyle(
-                          color: _getStatusColor(
-                            completedLessons,
-                            totalLessons,
-                          ),
+                          color: _getStatusColor(module),
                           fontSize: 9,
                           fontWeight: FontWeight.w600,
                         ),
@@ -376,15 +449,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: _getStatusColor(
-                        completedLessons,
-                        totalLessons,
-                      ).withOpacity(0.15),
+                      color: _getStatusColor(module).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      _getStatusIcon(completedLessons, totalLessons),
-                      color: _getStatusColor(completedLessons, totalLessons),
+                      _getStatusIcon(module),
+                      color: _getStatusColor(module),
                       size: 14,
                     ),
                   ),
@@ -392,14 +462,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
 
-            // Module image
+            // Module image from assets
             Expanded(
               child: Center(
                 child: Container(
-                  height: 60, // Reduced height
-                  width: 60, // Reduced width
+                  height: 80,
+                  width: 80,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12), // Reduced radius
+                    borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.2),
@@ -410,7 +480,28 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(moduleItem.imagePath, fit: BoxFit.cover),
+                    child: Image.asset(
+                      _getModuleImagePath(module),
+                      height: 80,
+                      width: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        // Fallback to icon if image not found
+                        return Container(
+                          height: 80,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.school,
+                            color: Colors.blue,
+                            size: 40,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -418,51 +509,61 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
             // Module info
             Padding(
-              padding: const EdgeInsets.all(12), // Reduced padding
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min, // Added this
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Center(
                     child: Text(
-                      moduleItem.title,
+                      module.title,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 14, // Reduced font size
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                  const SizedBox(height: 4), // Reduced spacing
+                  const SizedBox(height: 4),
                   Center(
                     child: Text(
-                      '$completedLessons / $totalLessons lessons',
+                      isCompleted
+                          ? 'Quiz Score: $score'
+                          : progress > 0
+                              ? '$completedLessons/${module.lessons.length} lessons'
+                              : '${module.lessons.length} lessons',
                       style: TextStyle(
-                        color: Colors.grey[400],
+                        color: isCompleted
+                            ? Colors.green
+                            : progress > 0
+                                ? Colors.orange
+                                : Colors.grey[400],
                         fontSize: 11,
-                      ), // Reduced font size
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6), // Reduced spacing
-                  // Progress bar
+                  const SizedBox(height: 6),
+                  // Progress indicator
                   Container(
-                    height: 4, // Reduced height
+                    height: 4,
                     decoration: BoxDecoration(
                       color: Colors.grey[800],
                       borderRadius: BorderRadius.circular(2),
                     ),
                     child: FractionallySizedBox(
                       alignment: Alignment.centerLeft,
-                      widthFactor: progress,
+                      widthFactor: isCompleted ? 1.0 : progress,
                       child: Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors:
-                                isCompleted
-                                    ? [Colors.green, Colors.green.shade300]
-                                    : [Colors.blue, Colors.lightBlue],
+                            colors: isCompleted
+                                ? [Colors.green, Colors.green.shade300]
+                                : progress > 0
+                                    ? [Colors.orange, Colors.orange.shade300]
+                                    : [Colors.grey, Colors.grey],
                           ),
                           borderRadius: BorderRadius.circular(2),
                         ),
@@ -483,6 +584,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E21),
       appBar: AppBar(
+        actions: [
+          IconButton(onPressed: doLogout, icon: Icon(Icons.logout, color: Colors.red,))
+        ],
         backgroundColor: const Color(0xFF1C1F2A),
         elevation: 0,
         centerTitle: true,
@@ -496,81 +600,82 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
         ),
       ),
-      body:
-          _isLoading
-              ? const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.lightBlueAccent,
-                  strokeWidth: 3,
-                ),
-              )
-              : FadeTransition(
-                opacity: _fadeAnimation,
-                child: RefreshIndicator(
-                  onRefresh: loadProgress,
-                  color: Colors.lightBlueAccent,
-                  backgroundColor: const Color(0xFF1C1F2A),
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildWelcomeHeader(),
-                        _buildStatsRow(),
-                        const SizedBox(height: 24),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Your Modules',
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: Colors.lightBlueAccent,
+                strokeWidth: 3,
+              ),
+            )
+          : FadeTransition(
+              opacity: _fadeAnimation,
+              child: RefreshIndicator(
+                onRefresh: _loadProgress,
+                color: Colors.lightBlueAccent,
+                backgroundColor: const Color(0xFF1C1F2A),
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildWelcomeHeader(),
+                      _buildStatsRow(),
+                      const SizedBox(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Your Modules',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                // Handle view all - could show a separate page with all modules
+                              },
+                              child: const Text(
+                                'View All',
                                 style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
+                                  color: Colors.lightBlueAccent,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              TextButton(
-                                onPressed: () {
-                                  // Handle view all
-                                },
-                                child: const Text(
-                                  'View All',
-                                  style: TextStyle(
-                                    color: Colors.lightBlueAccent,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: localModules.length,
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                  childAspectRatio:
-                                      0.85, // Slightly increased aspect ratio
-                                ),
-                            itemBuilder:
-                                (context, index) => _buildModuleCard(index),
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: modules.length,
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.85,
                           ),
+                          itemBuilder: (context, index) => _buildModuleCard(index),
                         ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
                   ),
                 ),
               ),
+            ),
     );
+  }
+
+   void doLogout() async {
+    await FirebaseAuth.instance.signOut();
   }
 }

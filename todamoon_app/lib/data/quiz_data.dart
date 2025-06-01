@@ -1,225 +1,242 @@
-// quiz_data.dart - Define quiz questions for each module
 class QuizQuestion {
   final String question;
   final List<String> options;
-  final int correctAnswerIndex;
-  final String explanation;
+  final String correctAnswer;
+  final String moduleId;
 
   QuizQuestion({
     required this.question,
     required this.options,
-    required this.correctAnswerIndex,
-    required this.explanation,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'question': question,
-      'options': options,
-      'correctAnswerIndex': correctAnswerIndex,
-      'explanation': explanation,
-    };
-  }
-
-  factory QuizQuestion.fromMap(Map<String, dynamic> map) {
-    return QuizQuestion(
-      question: map['question'],
-      options: List<String>.from(map['options']),
-      correctAnswerIndex: map['correctAnswerIndex'],
-      explanation: map['explanation'],
-    );
-  }
-}
-
-class ModuleQuiz {
-  final String moduleId;
-  final String title;
-  final List<QuizQuestion> questions;
-  final int passingScore; // percentage needed to pass
-
-  ModuleQuiz({
+    required this.correctAnswer,
     required this.moduleId,
-    required this.title,
-    required this.questions,
-    this.passingScore = 70,
   });
 }
 
-// Sample quiz data - you can expand this based on your modules
-final Map<String, ModuleQuiz> moduleQuizzes = {
-  'basic_flutter': ModuleQuiz(
-    moduleId: 'basic_flutter',
-    title: 'Flutter Basics Quiz',
-    questions: [
-      QuizQuestion(
-        question: 'What is Flutter?',
-        options: [
-          'A JavaScript framework',
-          'A UI toolkit for building cross-platform apps',
-          'A database management system',
-          'A web browser',
-        ],
-        correctAnswerIndex: 1,
-        explanation:
-            'Flutter is Google\'s UI toolkit for building beautiful, natively compiled applications for mobile, web, and desktop from a single codebase.',
-      ),
-      QuizQuestion(
-        question: 'Which programming language is primarily used in Flutter?',
-        options: ['Java', 'Swift', 'Dart', 'JavaScript'],
-        correctAnswerIndex: 2,
-        explanation:
-            'Flutter uses Dart programming language, which was also developed by Google.',
-      ),
-      QuizQuestion(
-        question: 'What is a Widget in Flutter?',
-        options: [
-          'A small application',
-          'A building block of the UI',
-          'A type of variable',
-          'A database table',
-        ],
-        correctAnswerIndex: 1,
-        explanation:
-            'In Flutter, everything is a widget. Widgets are the building blocks of Flutter applications that describe what their view should look like.',
-      ),
-      QuizQuestion(
-        question: 'Which widget is used to create a scrollable list?',
-        options: ['Container', 'ListView', 'Row', 'Stack'],
-        correctAnswerIndex: 1,
-        explanation:
-            'ListView is the widget used to create scrollable lists in Flutter.',
-      ),
-      QuizQuestion(
-        question:
-            'What does StatefulWidget provide that StatelessWidget doesn\'t?',
-        options: [
-          'Better performance',
-          'Ability to change state during runtime',
-          'More styling options',
-          'Database connectivity',
-        ],
-        correctAnswerIndex: 1,
-        explanation:
-            'StatefulWidget can maintain state that can change during the widget\'s lifetime, while StatelessWidget is immutable.',
-      ),
-      QuizQuestion(
-        question:
-            'Which method is called when a StatefulWidget is first created?',
-        options: ['build()', 'dispose()', 'initState()', 'setState()'],
-        correctAnswerIndex: 2,
-        explanation:
-            'initState() is called once when the StatefulWidget is first created and inserted into the widget tree.',
-      ),
-      QuizQuestion(
-        question: 'What is the purpose of the build() method?',
-        options: [
-          'To compile the app',
-          'To describe the UI of the widget',
-          'To handle user input',
-          'To manage app state',
-        ],
-        correctAnswerIndex: 1,
-        explanation:
-            'The build() method describes the part of the user interface represented by the widget.',
-      ),
-      QuizQuestion(
-        question:
-            'Which widget is used for layout with children in a vertical arrangement?',
-        options: ['Row', 'Column', 'Stack', 'Wrap'],
-        correctAnswerIndex: 1,
-        explanation: 'Column widget arranges its children vertically.',
-      ),
-      QuizQuestion(
-        question: 'What is Hot Reload in Flutter?',
-        options: [
-          'A debugging tool',
-          'A feature that allows instant code changes preview',
-          'A testing framework',
-          'A deployment method',
-        ],
-        correctAnswerIndex: 1,
-        explanation:
-            'Hot Reload allows developers to see changes in code instantly without losing the app state.',
-      ),
-      QuizQuestion(
-        question: 'Which file contains the main entry point of a Flutter app?',
-        options: ['index.dart', 'app.dart', 'main.dart', 'flutter.dart'],
-        correctAnswerIndex: 2,
-        explanation:
-            'main.dart contains the main() function which is the entry point of every Flutter application.',
-      ),
-      QuizQuestion(
-        question:
-            'What is the difference between mainAxisAlignment and crossAxisAlignment?',
-        options: [
-          'No difference, they are the same',
-          'mainAxis is horizontal, crossAxis is vertical',
-          'mainAxis is the primary direction, crossAxis is perpendicular',
-          'mainAxis is for positioning, crossAxis is for sizing',
-        ],
-        correctAnswerIndex: 2,
-        explanation:
-            'mainAxisAlignment controls alignment along the main axis (vertical for Column, horizontal for Row), while crossAxisAlignment controls alignment along the cross axis (perpendicular to main axis).',
-      ),
-      QuizQuestion(
-        question: 'Which widget provides material design styling?',
-        options: ['CupertinoApp', 'MaterialApp', 'WidgetsApp', 'FlutterApp'],
-        correctAnswerIndex: 1,
-        explanation:
-            'MaterialApp provides Material Design styling and navigation features for Flutter apps.',
-      ),
-      QuizQuestion(
-        question: 'What is the purpose of the Scaffold widget?',
-        options: [
-          'To create animations',
-          'To provide basic layout structure for screens',
-          'To handle user input',
-          'To manage app state',
-        ],
-        correctAnswerIndex: 1,
-        explanation:
-            'Scaffold provides the basic material design visual layout structure including AppBar, Body, FloatingActionButton, etc.',
-      ),
-      QuizQuestion(
-        question: 'How do you navigate to a new screen in Flutter?',
-        options: [
-          'Navigator.push()',
-          'Screen.navigate()',
-          'Route.change()',
-          'App.goto()',
-        ],
-        correctAnswerIndex: 0,
-        explanation:
-            'Navigator.push() is used to navigate to a new screen by pushing a new route onto the navigation stack.',
-      ),
-      QuizQuestion(
-        question:
-            'What is the recommended way to manage simple state in Flutter?',
-        options: ['Redux', 'setState()', 'BLoC', 'Provider'],
-        correctAnswerIndex: 1,
-        explanation:
-            'For simple state management within a single widget, setState() is the recommended approach.',
-      ),
-    ],
+
+final Map<String, List<QuizQuestion>> moduleQuizQuestions = {
+  'introduction': [
+  QuizQuestion(
+    question: 'What makes cryptocurrencies decentralized?',
+    options: ['They are digital', 'No government or central bank controls them', 'They use the internet', 'They are encrypted'],
+    correctAnswer: 'No government or central bank controls them',
+    moduleId: 'introduction',
   ),
-  // Add more module quizzes here for other modules
-  'advanced_widgets': ModuleQuiz(
-    moduleId: 'advanced_widgets',
-    title: 'Advanced Widgets Quiz',
-    questions: [
-      QuizQuestion(
-        question: 'What is the purpose of the FutureBuilder widget?',
-        options: [
-          'To build UI based on Future results',
-          'To create animations',
-          'To handle user input',
-          'To manage routes',
-        ],
-        correctAnswerIndex: 0,
-        explanation:
-            'FutureBuilder builds UI based on the latest snapshot of interaction with a Future.',
-      ),
-      // Add more questions for advanced widgets...
-    ],
+  QuizQuestion(
+    question: 'What does the prefix "crypt" mean in cryptocurrency?',
+    options: ['Digital', 'Hidden', 'Secure', 'Fast'],
+    correctAnswer: 'Hidden',
+    moduleId: 'introduction',
   ),
+  QuizQuestion(
+    question: 'How are cryptocurrencies most commonly used today?',
+    options: ['As payment for goods and services', 'As financial assets for trading and investing', 'As replacement for banks', 'As digital receipts'],
+    correctAnswer: 'As financial assets for trading and investing',
+    moduleId: 'introduction',
+  ),
+  QuizQuestion(
+    question: 'What was the first cryptocurrency?',
+    options: ['Ethereum', 'Dogecoin', 'Bitcoin', 'Litecoin'],
+    correctAnswer: 'Bitcoin',
+    moduleId: 'introduction',
+  ),
+  QuizQuestion(
+    question: 'What makes cryptocurrencies "borderless"?',
+    options: ['They have no transaction fees', 'They can be sent globally with just internet access', 'They are not regulated', 'They are anonymous'],
+    correctAnswer: 'They can be sent globally with just internet access',
+    moduleId: 'introduction',
+  ),
+  QuizQuestion(
+    question: 'What does "permissionless" mean in cryptocurrency?',
+    options: ['No fees required', 'Anyone can use them without approval', 'They are completely anonymous', 'No internet needed'],
+    correctAnswer: 'Anyone can use them without approval',
+    moduleId: 'introduction',
+  ),
+  QuizQuestion(
+    question: 'Who creates new units of cryptocurrency?',
+    options: ['Central banks', 'Governments', 'Software following predetermined rules', 'Cryptocurrency exchanges'],
+    correctAnswer: 'Software following predetermined rules',
+    moduleId: 'introduction',
+  ),
+  QuizQuestion(
+    question: 'What is a "fiat" currency?',
+    options: ['Digital money', 'Traditional currency controlled by governments/banks', 'Cryptocurrency', 'Online payment system'],
+    correctAnswer: 'Traditional currency controlled by governments/banks',
+    moduleId: 'introduction',
+  ),
+  QuizQuestion(
+    question: 'How does the crypto market differ from the forex market in terms of operating hours?',
+    options: ['Crypto closes on weekends', 'Forex is open 24/7', 'Crypto is open 24/7, forex closes on weekends', 'They have the same hours'],
+    correctAnswer: 'Crypto is open 24/7, forex closes on weekends',
+    moduleId: 'introduction',
+  ),
+  QuizQuestion(
+    question: 'What should be your approach when entering the crypto market?',
+    options: ['Buy any coin that promises to change the world', 'Treat it as a sure bet for automatic money growth', 'Understand the technology before investing', 'Follow social media recommendations'],
+    correctAnswer: 'Understand the technology before investing',
+    moduleId: 'introduction',
+  ),
+],
+  
+  'bitcoin': [
+    QuizQuestion(
+      question: 'Who created Bitcoin and when was it first introduced?',
+      options: ['Vitalik Buterin in 2009', 'Satoshi Nakamoto in 2008', 'Elon Musk in 2010', 'Mark Zuckerberg in 2007'],
+      correctAnswer: 'Satoshi Nakamoto in 2008',
+      moduleId: 'bitcoin',
+    ),
+    QuizQuestion(
+      question: 'What is the maximum supply of Bitcoin that will ever exist?',
+      options: ['100 million', '50 million', '21 million', 'Unlimited'],
+      correctAnswer: '21 million',
+      moduleId: 'bitcoin',
+    ),
+    QuizQuestion(
+      question: 'What was the main problem Bitcoin was designed to solve?',
+      options: ['Making money faster', 'Allowing online payments without going through financial institutions', 'Creating cheaper transactions', 'Making money anonymous'],
+      correctAnswer: 'Allowing online payments without going through financial institutions',
+      moduleId: 'bitcoin',
+    ),
+    QuizQuestion(
+      question: 'What does "decentralized" mean in the context of Bitcoin?',
+      options: ['It uses advanced encryption', 'No single entity or authority controls it', 'It operates only on weekends', 'It requires government approval'],
+      correctAnswer: 'No single entity or authority controls it',
+      moduleId: 'bitcoin',
+    ),
+    QuizQuestion(
+      question: 'What is the most secure type of Bitcoin wallet for long-term storage?',
+      options: ['Web wallets', 'Exchange wallets', 'Cold wallets (hardware/paper wallets)', 'Mobile wallets'],
+      correctAnswer: 'Cold wallets (hardware/paper wallets)',
+      moduleId: 'bitcoin',
+    ),
+  ],
+
+   'hashing': [
+    QuizQuestion(
+      question: 'What is the "avalanche effect" in cryptographic hash functions?',
+      options: ['Hashes become larger over time', 'Small input changes cause dramatic output changes', 'Multiple inputs produce the same hash', 'Hash functions become faster'],
+      correctAnswer: 'Small input changes cause dramatic output changes',
+      moduleId: 'hashing',
+    ),
+    QuizQuestion(
+      question: 'Which hash function does Bitcoin use?',
+      options: ['MD5', 'SHA-256', 'Keccak-256', 'Scrypt'],
+      correctAnswer: 'SHA-256',
+      moduleId: 'hashing',
+    ),
+    QuizQuestion(
+      question: 'How do blocks in a blockchain reference each other?',
+      options: ['Through timestamps', 'Each block contains the hash of the previous block', 'Through transaction IDs', 'Through wallet addresses'],
+      correctAnswer: 'Each block contains the hash of the previous block',
+      moduleId: 'hashing',
+    ),
+    QuizQuestion(
+      question: 'In Proof of Work mining, what are miners trying to find?',
+      options: ['The fastest transaction', 'A hash that meets specific criteria (like starting with zeros)', 'The largest block size', 'The oldest transaction'],
+      correctAnswer: 'A hash that meets specific criteria (like starting with zeros)',
+      moduleId: 'hashing',
+    ),
+    QuizQuestion(
+      question: 'What is a key security benefit of hash functions in blockchain?',
+      options: ['They make transactions faster', 'They provide immutability - changing old data would require enormous computational power', 'They reduce transaction fees', 'They make wallets more user-friendly'],
+      correctAnswer: 'They provide immutability - changing old data would require enormous computational power',
+      moduleId: 'hashing',
+    ),
+  ],
+  'blockchain': [
+    QuizQuestion(
+      question: 'What is a blockchain best described as?',
+      options: ['A single computer storing data', 'A distributed ledger copied across many computers', 'A centralized database', 'A type of cryptocurrency'],
+      correctAnswer: 'A distributed ledger copied across many computers',
+      moduleId: 'blockchain',
+    ),
+    QuizQuestion(
+      question: 'What consensus mechanism does Bitcoin use?',
+      options: ['Proof of Stake', 'Proof of Work', 'Delegated Proof of Stake', 'Proof of Authority'],
+      correctAnswer: 'Proof of Work',
+      moduleId: 'blockchain',
+    ),
+    QuizQuestion(
+      question: 'What is the main advantage of Proof of Stake over Proof of Work?',
+      options: ['More secure', 'Much more energy efficient', 'Completely decentralized', 'Faster mining'],
+      correctAnswer: 'Much more energy efficient',
+      moduleId: 'blockchain',
+    ),
+    QuizQuestion(
+      question: 'What is a Merkle Tree used for in blockchain?',
+      options: ['Storing user passwords', 'Efficiently summarizing all transactions in a block', 'Creating new cryptocurrencies', 'Managing user wallets'],
+      correctAnswer: 'Efficiently summarizing all transactions in a block',
+      moduleId: 'blockchain',
+    ),
+    QuizQuestion(
+      question: 'Beyond cryptocurrency, blockchain technology can be applied to:',
+      options: ['Only financial services', 'Supply chain management and digital identity', 'Only gaming applications', 'Only voting systems'],
+      correctAnswer: 'Supply chain management and digital identity',
+      moduleId: 'blockchain',
+    ),
+  ],
+  'altcoins': [
+  QuizQuestion(
+    question: 'What does "altcoin" stand for?',
+    options: ['Alternative coin', 'Advanced coin', 'Algorithmic coin', 'Automated coin'],
+    correctAnswer: 'Alternative coin',
+    moduleId: 'altcoins',
+  ),
+  QuizQuestion(
+    question: 'Which was the first blockchain to successfully implement smart contracts at scale?',
+    options: ['Bitcoin', 'Ethereum', 'Litecoin', 'Cardano'],
+    correctAnswer: 'Ethereum',
+    moduleId: 'altcoins',
+  ),
+  QuizQuestion(
+    question: 'What are stablecoins designed to do?',
+    options: ['Increase in value over time', 'Maintain stable value relative to reference assets', 'Enable smart contracts', 'Provide enhanced privacy'],
+    correctAnswer: 'Maintain stable value relative to reference assets',
+    moduleId: 'altcoins',
+  ),
+  QuizQuestion(
+    question: 'Which privacy coin uses ring signatures and stealth addresses?',
+    options: ['Zcash', 'Dash', 'Monero', 'Litecoin'],
+    correctAnswer: 'Monero',
+    moduleId: 'altcoins',
+  ),
+  QuizQuestion(
+    question: 'What is the primary purpose of oracle tokens like Chainlink?',
+    options: ['Enable faster payments', 'Provide stable value storage', 'Connect blockchains to real-world data', 'Create meme-based communities'],
+    correctAnswer: 'Connect blockchains to real-world data',
+    moduleId: 'altcoins',
+  ),
+],
+'crypto_exchanges': [
+  QuizQuestion(
+    question: 'What is the main difference between centralized and decentralized exchanges?',
+    options: ['Centralized exchanges are faster', 'Centralized exchanges hold user funds while decentralized exchanges let users maintain control', 'Decentralized exchanges have better customer support', 'Centralized exchanges only trade Bitcoin'],
+    correctAnswer: 'Centralized exchanges hold user funds while decentralized exchanges let users maintain control',
+    moduleId: 'crypto_exchanges',
+  ),
+  QuizQuestion(
+    question: 'What type of order executes immediately at the current market price?',
+    options: ['Limit Order', 'Stop Order', 'Market Order', 'Stop-Limit Order'],
+    correctAnswer: 'Market Order',
+    moduleId: 'crypto_exchanges',
+  ),
+  QuizQuestion(
+    question: 'Which security practice is most recommended for protecting exchange accounts?',
+    options: ['Using SMS for two-factor authentication', 'Keeping all funds on the exchange for convenience', 'Enabling 2FA with an authenticator app and using strong passwords', 'Sharing account credentials with trusted friends'],
+    correctAnswer: 'Enabling 2FA with an authenticator app and using strong passwords',
+    moduleId: 'crypto_exchanges',
+  ),
+  QuizQuestion(
+    question: 'What does "Not your keys, not your crypto" mean?',
+    options: ['You should memorize your passwords', 'If you don\'t control the private keys, you don\'t truly own the cryptocurrency', 'Exchanges are always safer than personal wallets', 'You need physical keys to access crypto'],
+    correctAnswer: 'If you don\'t control the private keys, you don\'t truly own the cryptocurrency',
+    moduleId: 'crypto_exchanges',
+  ),
+  QuizQuestion(
+    question: 'What is Dollar-Cost Averaging (DCA) in crypto trading?',
+    options: ['Buying only when prices are low', 'Making regular purchases regardless of price to reduce volatility impact', 'Selling everything when market crashes', 'Only trading during certain hours'],
+    correctAnswer: 'Making regular purchases regardless of price to reduce volatility impact',
+    moduleId: 'crypto_exchanges',
+  ),
+],
+  
 };

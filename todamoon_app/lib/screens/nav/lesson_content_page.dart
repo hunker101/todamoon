@@ -27,32 +27,43 @@ class _LessonContentPageState extends State<LessonContentPage> {
   @override
   void initState() {
     super.initState();
-    checkCompletionStatus();
+    _checkCompletionStatus();
   }
 
-  Future<void> checkCompletionStatus() async {
+  Future<void> _checkCompletionStatus() async {
     try {
-      final doc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(widget.uid)
-              .get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.uid)
+          .get();
 
-      final progress = doc.data()?['progress'] ?? {};
-      final moduleProgress = progress[widget.module.id] ?? [];
+      if (doc.exists) {
+        final data = doc.data();
+        final progress = data?['progress'] as Map<String, dynamic>? ?? {};
+        final moduleProgress = progress[widget.module.id] as List<dynamic>? ?? [];
 
+        setState(() {
+          _isCompleted = moduleProgress.contains(widget.lesson.id);
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isCompleted = false;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error checking completion status: $e');
       setState(() {
-        _isCompleted = List<String>.from(
-          moduleProgress,
-        ).contains(widget.lesson.id);
+        _isCompleted = false;
         _isLoading = false;
       });
-    } catch (e) {
-      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> markAsCompleted() async {
+  Future<void> _markAsCompleted() async {
+    if (_isCompleted) return;
+
     try {
       final docRef = FirebaseFirestore.instance
           .collection('users')
@@ -60,7 +71,17 @@ class _LessonContentPageState extends State<LessonContentPage> {
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final doc = await transaction.get(docRef);
-        final progress = doc.data()?['progress'] ?? {};
+        
+        Map<String, dynamic> progress;
+        if (doc.exists) {
+          final data = doc.data() ?? {};
+          progress = Map<String, dynamic>.from(data['progress'] ?? {});
+        } else {
+          progress = {};
+          // Create user document if it doesn't exist
+          transaction.set(docRef, {'progress': {}});
+        }
+
         final moduleProgress = List<String>.from(
           progress[widget.module.id] ?? [],
         );
@@ -68,7 +89,12 @@ class _LessonContentPageState extends State<LessonContentPage> {
         if (!moduleProgress.contains(widget.lesson.id)) {
           moduleProgress.add(widget.lesson.id);
           progress[widget.module.id] = moduleProgress;
-          transaction.update(docRef, {'progress': progress});
+          
+          if (doc.exists) {
+            transaction.update(docRef, {'progress': progress});
+          } else {
+            transaction.set(docRef, {'progress': progress});
+          }
         }
       });
 
@@ -76,23 +102,33 @@ class _LessonContentPageState extends State<LessonContentPage> {
       widget.onComplete();
 
       // Show completion message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Lesson completed! 🎉'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Lesson completed! 🎉'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error marking lesson as complete: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      debugPrint('Error marking lesson as complete: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error marking lesson as complete: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -104,6 +140,7 @@ class _LessonContentPageState extends State<LessonContentPage> {
         children: [
           // Lesson header
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -131,6 +168,7 @@ class _LessonContentPageState extends State<LessonContentPage> {
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.9),
                       fontSize: 16,
+                      height: 1.4,
                     ),
                   ),
                 ],
@@ -140,81 +178,29 @@ class _LessonContentPageState extends State<LessonContentPage> {
 
           const SizedBox(height: 24),
 
-          // Lesson content sections
-          ...widget.lesson.content.map((section) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 20),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1F2A),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+          // Lesson content (simplified - no more sections)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1F2A),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              widget.lesson.content,
+              style: TextStyle(
+                color: Colors.grey.shade300,
+                fontSize: 16,
+                height: 1.6,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (section.title != null) ...[
-                    Text(
-                      section.title!,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  Text(
-                    section.content,
-                    style: TextStyle(
-                      color: Colors.grey.shade300,
-                      fontSize: 16,
-                      height: 1.6,
-                    ),
-                  ),
-                  if (section.bulletPoints != null &&
-                      section.bulletPoints!.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    ...section.bulletPoints!.map((point) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              margin: const EdgeInsets.only(top: 8, right: 12),
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade400,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                point,
-                                style: TextStyle(
-                                  color: Colors.grey.shade300,
-                                  fontSize: 15,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ],
-                ],
-              ),
-            );
-          }).toList(),
+            ),
+          ),
 
           const SizedBox(height: 40),
         ],
@@ -253,55 +239,54 @@ class _LessonContentPageState extends State<LessonContentPage> {
             ),
         ],
       ),
-      body:
-          _isLoading
-              ? const Center(
-                child: CircularProgressIndicator(color: Colors.orange),
-              )
-              : _buildLessonContent(),
-      bottomNavigationBar:
-          _isLoading
-              ? null
-              : Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1C1F2A),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isCompleted ? null : markAsCompleted,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            _isCompleted
-                                ? Colors.green
-                                : Colors.orange.shade400,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.orange),
+            )
+          : _buildLessonContent(),
+      bottomNavigationBar: _isLoading
+          ? null
+          : Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1F2A),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _isCompleted ? null : _markAsCompleted,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isCompleted
+                          ? Colors.green
+                          : Colors.orange.shade400,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
-                        _isCompleted ? 'Completed ✓' : 'Mark as Complete',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      elevation: 0,
+                      disabledBackgroundColor: Colors.green,
+                      disabledForegroundColor: Colors.white,
+                    ),
+                    child: Text(
+                      _isCompleted ? 'Completed ' : 'Mark as Complete',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
     );
   }
 }

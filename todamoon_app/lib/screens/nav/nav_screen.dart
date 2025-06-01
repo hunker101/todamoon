@@ -2,7 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:todamoon_app/screens/nav/home_page.dart';
 import 'package:todamoon_app/screens/nav/market_page.dart';
-import 'package:todamoon_app/screens/nav/profile_page.dart';
+import 'package:todamoon_app/screens/nav/news_page.dart';
+
 import 'package:todamoon_app/screens/nav/watchlist.dart';
 
 class MainNavScreen extends StatefulWidget {
@@ -25,8 +26,9 @@ class _MainNavScreenState extends State<MainNavScreen> {
     _screens.addAll([
       HomePage(uid: widget.uid),
       MarketPage(),
-      WatchlistPage(uid: widget.uid),
-      ProfilePage(uid: FirebaseAuth.instance.currentUser!.uid),
+      NewsPage(),
+      WatchlistPage(),
+      
     ]);
   }
 
@@ -51,8 +53,12 @@ class _MainNavScreenState extends State<MainNavScreen> {
             icon: Icon(Icons.trending_up),
             label: 'Market',
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.article_rounded),
+            label: 'News',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Watchlist'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          
         ],
       ),
     );

@@ -38,7 +38,10 @@ class _MarketPageState extends State<MarketPage> {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E21),
       appBar: AppBar(
-        title: const Text('Market'),
+        automaticallyImplyLeading: true,
+        iconTheme: IconThemeData(color: Colors.white),
+        title:  Text('Market', style: TextStyle(fontWeight:FontWeight.bold, color: Colors.white ),),
+        centerTitle: true,
         backgroundColor: const Color(0xFF1C1F2A),
       ),
       body:
@@ -73,10 +76,13 @@ class _MarketPageState extends State<MarketPage> {
                         MaterialPageRoute(
                           builder:
                               (_) => CoinDetailPage(
-                                coinId: coin.id,
-                                coinName: coin.name,
-                              ),
-                        ),
+      coin: {
+        'id': coin.id,
+        'name': coin.name,
+        'symbol': coin.symbol,
+        'price': coin.price,
+      },
+    ),),
                       );
                     },
                   );

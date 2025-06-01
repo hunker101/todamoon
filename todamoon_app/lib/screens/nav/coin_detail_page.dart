@@ -1,517 +1,206 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'package:fl_chart/fl_chart.dart';
 
 class CoinDetailPage extends StatefulWidget {
-  final String coinId;
-  final String coinName;
+  final Map<String, dynamic> coin;
 
-  const CoinDetailPage({
-    super.key,
-    required this.coinId,
-    required this.coinName,
-  });
+  const CoinDetailPage({super.key, required this.coin});
 
   @override
   State<CoinDetailPage> createState() => _CoinDetailPageState();
 }
 
 class _CoinDetailPageState extends State<CoinDetailPage> {
-  List<FlSpot> _chartData = [];
-  List<String> _xLabels = [];
-  bool _isLoading = true;
-  bool _isFavorite = false;
-  Map<String, dynamic>? _coinData;
-  String _selectedTimeframe = '2';
-
-  final uid = FirebaseAuth.instance.currentUser?.uid;
+  final user = FirebaseAuth.instance.currentUser;
+  bool isInWatchlist = false;
+  bool isLoading = true;
+  String selectedTimeFrame = '1D';
+  
+  Map<String, dynamic> coinDetails = {};
+  List<FlSpot> chartData = [];
+  double? priceChangePercentage;
 
   @override
   void initState() {
     super.initState();
-    fetchChartData();
-    fetchCoinData();
-    checkIfFavorite();
+    checkWatchlist(widget.coin['id']);
+    fetchCoinDetails();
+    fetchChartData('1');
   }
 
-  Future<void> fetchCoinData() async {
-    try {
-      final url = 'https://api.coingecko.com/api/v3/coins/${widget.coinId}';
-      final response = await http.get(Uri.parse(url));
+  Future<void> checkWatchlist(String coinId) async {
+    final ref = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('watchlist')
+        .doc(coinId);
 
-      if (response.statusCode == 200) {
-        setState(() {
-          _coinData = json.decode(response.body);
-        });
-      }
-    } catch (e) {
-      print('❌ Error fetching coin data: $e');
+    final snapshot = await ref.get();
+    setState(() => isInWatchlist = snapshot.exists);
+  }
+
+  Future<void> toggleWatchlist() async {
+    final ref = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('watchlist')
+        .doc(widget.coin['id']);
+
+    final snapshot = await ref.get();
+
+    if (snapshot.exists) {
+      await ref.delete();
+      setState(() => isInWatchlist = false);
+    } else {
+      await ref.set({
+        'id': widget.coin['id'],
+        'name': widget.coin['name'],
+        'symbol': widget.coin['symbol'],
+        'price': widget.coin['price'],
+        'image': coinDetails['image']?['small'],
+        'addedAt': FieldValue.serverTimestamp(),
+      });
+      setState(() => isInWatchlist = true);
     }
   }
 
-  Future<void> fetchChartData([String days = '2']) async {
-    setState(() => _isLoading = true);
-
+  Future<void> fetchCoinDetails() async {
     try {
-      final url =
-          'https://api.coingecko.com/api/v3/coins/${widget.coinId}/market_chart?vs_currency=usd&days=$days';
+      final response = await http.get(
+        Uri.parse('https://api.coingecko.com/api/v3/coins/${widget.coin['id']}'),
+      );
 
-      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          coinDetails = data;
+          priceChangePercentage = data['market_data']?['price_change_percentage_24h']?.toDouble();
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() => isLoading = false);
+      debugPrint('Error fetching coin details: $e');
+    }
+  }
+
+  Future<void> fetchChartData(String days) async {
+    try {
+      setState(() {
+        // Clear chart data while loading new data
+        chartData = [];
+      });
+
+      final response = await http.get(
+        Uri.parse('https://api.coingecko.com/api/v3/coins/${widget.coin['id']}/market_chart?vs_currency=usd&days=$days'),
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final prices = data['prices'] as List;
-
-        final List<FlSpot> spots = [];
-        final List<String> labels = [];
-
+        
+        List<FlSpot> newChartData = [];
         for (int i = 0; i < prices.length; i++) {
-          double time = i.toDouble();
-          double price = (prices[i][1] as num).toDouble();
-
-          DateTime timestamp = DateTime.fromMillisecondsSinceEpoch(
-            prices[i][0],
-          );
-          String label =
-              days == '1'
-                  ? DateFormat.Hm().format(timestamp)
-                  : DateFormat.MMMd().format(timestamp);
-
-          spots.add(FlSpot(time, price));
-          labels.add(label);
+          final price = prices[i];
+          if (price is List && price.length >= 2) {
+            newChartData.add(FlSpot(i.toDouble(), price[1].toDouble()));
+          }
         }
-
+        
         setState(() {
-          _chartData = spots;
-          _xLabels = labels;
-          _isLoading = false;
+          chartData = newChartData;
         });
       } else {
-        throw Exception("Failed to load chart data: ${response.statusCode}");
+        debugPrint('Failed to fetch chart data: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Error fetching chart data: $e');
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> checkIfFavorite() async {
-    if (uid == null) return;
-
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('watchlist')
-            .doc(widget.coinId)
-            .get();
-
-    setState(() {
-      _isFavorite = doc.exists;
-    });
-  }
-
-  Future<void> toggleFavorite() async {
-    if (uid == null) return;
-
-    final watchlistRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('watchlist')
-        .doc(widget.coinId);
-
-    if (_isFavorite) {
-      await watchlistRef.delete();
-    } else {
-      await watchlistRef.set({
-        'name': widget.coinName,
-        'symbol': widget.coinId.toUpperCase(),
-        'image':
-            'https://assets.coingecko.com/coins/images/1/large/${widget.coinId}.png',
-        'timestamp': FieldValue.serverTimestamp(),
+      debugPrint('Error fetching chart data: $e');
+      setState(() {
+        chartData = [];
       });
     }
-
-    setState(() => _isFavorite = !_isFavorite);
   }
 
-  Widget _buildPriceHeader() {
-    if (_coinData == null) return const SizedBox.shrink();
+  void onTimeFrameChanged(String timeFrame) {
+    if (selectedTimeFrame == timeFrame) return; // Don't refetch if same timeframe
+    
+    setState(() {
+      selectedTimeFrame = timeFrame;
+    });
+    
+    String days;
+    switch (timeFrame) {
+      case '1D':
+        days = '1';
+        break;
+      case '1W':
+        days = '7';
+        break;
+      case '1M':
+        days = '30';
+        break;
+      case '3M':
+        days = '90';
+        break;
+      default:
+        days = '1';
+    }
+    
+    fetchChartData(days);
+  }
 
-    final currentPrice = _coinData!['market_data']['current_price']['usd'];
-    final priceChange24h =
-        _coinData!['market_data']['price_change_percentage_24h'];
-    final isPositive = priceChange24h > 0;
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [const Color(0xFF1C1F2A), const Color(0xFF0A0E21)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+  Widget _buildTimeFrameButton(String timeFrame) {
+    bool isSelected = selectedTimeFrame == timeFrame;
+    return Flexible(
+      child: GestureDetector(
+        onTap: () => onTimeFrameChanged(timeFrame),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.lightBlueAccent : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
           ),
-        ],
+          child: Text(
+            timeFrame,
+            style: TextStyle(
+              color: isSelected ? Colors.black : Colors.grey,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildStatItem(String title, String value) {
+    return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.lightBlueAccent.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Image.network(
-                    _coinData!['image']['large'] ?? '',
-                    errorBuilder:
-                        (context, error, stackTrace) => const Icon(
-                          Icons.currency_bitcoin,
-                          size: 32,
-                          color: Colors.orange,
-                        ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.coinName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      _coinData!['symbol'].toString().toUpperCase(),
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
           Text(
-            '\$${NumberFormat('#,##0.00').format(currentPrice)}',
+            title,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 36,
-              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                isPositive ? Icons.trending_up : Icons.trending_down,
-                color: isPositive ? Colors.green : Colors.red,
-                size: 20,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${isPositive ? '+' : ''}${priceChange24h.toStringAsFixed(2)}%',
-                style: TextStyle(
-                  color: isPositive ? Colors.green : Colors.red,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '24h',
-                style: TextStyle(color: Colors.grey[400], fontSize: 14),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatsGrid() {
-    if (_coinData == null) return const SizedBox.shrink();
-
-    final marketData = _coinData!['market_data'];
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1F2A),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Market Statistics',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  'Market Cap',
-                  '\$${NumberFormat.compact().format(marketData['market_cap']['usd'])}',
-                ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  '24h Volume',
-                  '\$${NumberFormat.compact().format(marketData['total_volume']['usd'])}',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  '24h High',
-                  '\$${NumberFormat('#,##0.00').format(marketData['high_24h']['usd'])}',
-                ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  '24h Low',
-                  '\$${NumberFormat('#,##0.00').format(marketData['low_24h']['usd'])}',
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTimeframeSelector() {
-    final timeframes = {'1': '1D', '7': '1W', '30': '1M', '90': '3M'};
-
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1F2A),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children:
-            timeframes.entries.map((entry) {
-              final isSelected = _selectedTimeframe == entry.key;
-              return GestureDetector(
-                onTap: () {
-                  setState(() => _selectedTimeframe = entry.key);
-                  fetchChartData(entry.key);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color:
-                        isSelected
-                            ? Colors.lightBlueAccent
-                            : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    entry.value,
-                    style: TextStyle(
-                      color: isSelected ? Colors.black : Colors.grey[400],
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildChart() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1F2A),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Price Chart',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              _buildTimeframeSelector(),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 250,
-            child: LineChart(
-              LineChartData(
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: (_xLabels.length / 4).floorToDouble(),
-                      getTitlesWidget: (value, _) {
-                        final index = value.toInt();
-                        if (index >= 0 && index < _xLabels.length) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              _xLabels[index],
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 10,
-                              ),
-                            ),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget:
-                          (value, _) => Text(
-                            '\$${NumberFormat.compact().format(value)}',
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 10,
-                            ),
-                          ),
-                      reservedSize: 50,
-                    ),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: null,
-                  getDrawingHorizontalLine:
-                      (value) => FlLine(
-                        color: Colors.white.withOpacity(0.1),
-                        strokeWidth: 1,
-                      ),
-                ),
-                lineBarsData: [
-                  LineChartBarData(
-                    isCurved: true,
-                    curveSmoothness: 0.3,
-                    spots: _chartData,
-                    color: Colors.lightBlueAccent,
-                    barWidth: 3,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.lightBlueAccent.withOpacity(0.3),
-                          Colors.lightBlueAccent.withOpacity(0.05),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -523,101 +212,315 @@ class _CoinDetailPageState extends State<CoinDetailPage> {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E21),
       appBar: AppBar(
+        automaticallyImplyLeading: true,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
-          widget.coinName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          widget.coin['name'] ?? 'Unknown',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          overflow: TextOverflow.ellipsis,
         ),
+        centerTitle: true,
         backgroundColor: const Color(0xFF1C1F2A),
-        elevation: 0,
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              boxShadow:
-                  _isFavorite
-                      ? [
-                        BoxShadow(
-                          color: Colors.amber.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                      : null,
+          IconButton(
+            icon: Icon(
+              isInWatchlist ? Icons.star : Icons.star_border,
+              color: Colors.amber,
             ),
-            child: IconButton(
-              icon: Icon(
-                _isFavorite ? Icons.star : Icons.star_border,
-                color: _isFavorite ? Colors.amber : Colors.grey[400],
-                size: 28,
-              ),
-              onPressed: toggleFavorite,
-            ),
+            onPressed: toggleWatchlist,
           ),
         ],
       ),
-      body:
-          _isLoading && _coinData == null
-              ? const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.lightBlueAccent,
-                  strokeWidth: 3,
-                ),
-              )
-              : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildPriceHeader(),
-                    const SizedBox(height: 20),
-                    _buildStatsGrid(),
-                    const SizedBox(height: 20),
-                    _isLoading
-                        ? Container(
-                          height: 300,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1C1F2A),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              color: Colors.lightBlueAccent,
-                              strokeWidth: 3,
-                            ),
-                          ),
-                        )
-                        : _chartData.isEmpty
-                        ? Container(
-                          height: 300,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1C1F2A),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.show_chart,
-                                  color: Colors.grey,
-                                  size: 48,
+      body: isLoading
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: Colors.lightBlueAccent,
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Coin Header Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1F2A),
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          const Color(0xFF1C1F2A),
+                          const Color(0xFF0A0E21).withOpacity(0.8),
+                        ],
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            if (coinDetails['image']?['small'] != null)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(25),
+                                child: Image.network(
+                                  coinDetails['image']['small'],
+                                  height: 50,
+                                  width: 50,
+                                  fit: BoxFit.cover,
                                 ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'No chart data available',
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 16,
+                              ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.coin['name'] ?? 'Unknown',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
+                                  Text(
+                                    (widget.coin['symbol'] ?? '').toString().toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 16,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          '\$${widget.coin['price']?.toStringAsFixed(2) ?? '0.00'}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (priceChangePercentage != null) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(
+                                priceChangePercentage! >= 0
+                                    ? Icons.trending_up
+                                    : Icons.trending_down,
+                                color: priceChangePercentage! >= 0
+                                    ? Colors.green
+                                    : Colors.red,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  '${priceChangePercentage!.toStringAsFixed(2)}% 24h',
+                                  style: TextStyle(
+                                    color: priceChangePercentage! >= 0
+                                        ? Colors.green
+                                        : Colors.red,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Market Statistics
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1F2A),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Market Statistics',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            _buildStatItem(
+                              'Market Cap',
+                              '\$${((coinDetails['market_data']?['market_cap']?['usd'] ?? 0) / 1e9).toStringAsFixed(1)}B',
+                            ),
+                            const SizedBox(width: 12),
+                            _buildStatItem(
+                              '24h Volume',
+                              '\$${((coinDetails['market_data']?['total_volume']?['usd'] ?? 0) / 1e9).toStringAsFixed(1)}B',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            _buildStatItem(
+                              '24h High',
+                              '\$${coinDetails['market_data']?['high_24h']?['usd']?.toStringAsFixed(2) ?? '0.00'}',
+                            ),
+                            const SizedBox(width: 12),
+                            _buildStatItem(
+                              '24h Low',
+                              '\$${coinDetails['market_data']?['low_24h']?['usd']?.toStringAsFixed(2) ?? '0.00'}',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Price Chart
+                  Container(
+                    width: double.infinity,
+                    height: 350,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1F2A),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Price Chart',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                _buildTimeFrameButton('1D'),
+                                _buildTimeFrameButton('1W'),
+                                _buildTimeFrameButton('1M'),
+                                _buildTimeFrameButton('3M'),
                               ],
                             ),
-                          ),
-                        )
-                        : _buildChart(),
-                  ],
-                ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Expanded(
+                          child: chartData.isNotEmpty
+                              ? LineChart(
+                                  LineChartData(
+                                    gridData: FlGridData(
+                                      show: true,
+                                      drawVerticalLine: false,
+                                      horizontalInterval: null,
+                                      getDrawingHorizontalLine: (value) {
+                                        return FlLine(
+                                          color: Colors.grey.withOpacity(0.2),
+                                          strokeWidth: 1,
+                                        );
+                                      },
+                                    ),
+                                    titlesData: FlTitlesData(
+                                      show: false,
+                                    ),
+                                    borderData: FlBorderData(show: false),
+                                    minX: 0,
+                                    maxX: chartData.isNotEmpty ? chartData.length.toDouble() - 1 : 0,
+                                    minY: chartData.isNotEmpty 
+                                        ? chartData.map((e) => e.y).reduce((a, b) => a < b ? a : b) * 0.995
+                                        : 0,
+                                    maxY: chartData.isNotEmpty 
+                                        ? chartData.map((e) => e.y).reduce((a, b) => a > b ? a : b) * 1.005
+                                        : 100,
+                                    lineBarsData: [
+                                      LineChartBarData(
+                                        spots: chartData,
+                                        isCurved: true,
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Colors.lightBlueAccent,
+                                            Colors.blue,
+                                          ],
+                                        ),
+                                        barWidth: 3,
+                                        isStrokeCapRound: true,
+                                        dotData: FlDotData(show: false),
+                                        belowBarData: BarAreaData(
+                                          show: true,
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [
+                                              Colors.lightBlueAccent.withOpacity(0.3),
+                                              Colors.lightBlueAccent.withOpacity(0.1),
+                                              Colors.transparent,
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : SizedBox(
+                                  height: 200,
+                                  child: const Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        CircularProgressIndicator(
+                                          color: Colors.lightBlueAccent,
+                                        ),
+                                        SizedBox(height: 16),
+                                        Text(
+                                          'Loading chart data...',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
+            ),
     );
   }
 }

@@ -1,86 +1,141 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:todamoon_app/screens/nav/lesson_content_page.dart';
 import '../../data/modules_data.dart';
+import 'quiz_page.dart';
 
-// Module Detail Page - Shows list of lessons
 class ModuleDetailPage extends StatefulWidget {
-  final Module module;
-  final String uid;
+  final String moduleId;
+  final String title;
+  final String description;
 
   const ModuleDetailPage({
-    Key? key,
-    required this.module, // Changed parameter name
-    required this.uid,
-  }) : super(key: key);
+    super.key,
+    required this.moduleId,
+    required this.title,
+    required this.description,
+  });
 
   @override
   State<ModuleDetailPage> createState() => _ModuleDetailPageState();
 }
 
-class _ModuleDetailPageState extends State<ModuleDetailPage> {
+class _ModuleDetailPageState extends State<ModuleDetailPage>
+    with TickerProviderStateMixin {
+  int? savedScore;
+  bool loading = true;
   List<String> completedLessons = [];
-  bool _isLoading = true;
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-    loadProgress();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+    fetchQuizProgress();
   }
 
-  Future<void> loadProgress() async {
-    try {
-      final doc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(widget.uid)
-              .get();
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
-      final progress = doc.data()?['progress'] ?? {};
-      final moduleProgress = progress[widget.module.id] ?? [];
+  Future<void> fetchQuizProgress() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      
+      // Fetch quiz progress
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('quiz_progress')
+          .doc(widget.moduleId)
+          .get();
+
+      // Fetch lesson progress
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      List<String> lessons = [];
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        final progressData = data?['progress'] as Map<String, dynamic>? ?? {};
+        lessons = List<String>.from(progressData[widget.moduleId] ?? []);
+      }
 
       setState(() {
-        completedLessons = List<String>.from(moduleProgress);
-        _isLoading = false;
+        savedScore = doc.exists ? doc['score'] : null;
+        completedLessons = lessons;
+        loading = false;
       });
+      _animationController.forward();
     } catch (e) {
-      setState(() => _isLoading = false);
+      debugPrint('Error fetching progress: $e');
+      setState(() {
+        loading = false;
+      });
+      _animationController.forward();
     }
   }
 
-  bool isLessonCompleted(String lessonId) {
-    return completedLessons.contains(lessonId);
+  Module? get currentModule {
+    try {
+      return modules.firstWhere((module) => module.id == widget.moduleId);
+    } catch (e) {
+      return null;
+    }
   }
 
-  int get completedCount => completedLessons.length;
-  double get progressPercentage =>
-      widget.module.lessons.isEmpty
-          ? 0.0
-          : completedCount / widget.module.lessons.length;
+  double get lessonProgress {
+    final module = currentModule;
+    if (module == null || module.lessons.isEmpty) return 0.0;
+    return completedLessons.length / module.lessons.length;
+  }
 
-  Widget _buildProgressHeader() {
+  bool get isModuleComplete {
+    return savedScore != null;
+  }
+
+  Widget _buildModuleHeader() {
+    final module = currentModule;
+    final progressPercent = (lessonProgress * 100).toInt();
+    final totalLessons = module?.lessons.length ?? 0;
+    final completedCount = completedLessons.length;
+
     return Container(
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Colors.orange.shade400, Colors.orange.shade600],
+          colors: [Color(0xFFFF9500), Color(0xFFFFB84D)],
         ),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.orange.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
       child: Column(
         children: [
           Row(
             children: [
+              // Module Icon
               Container(
                 width: 60,
                 height: 60,
@@ -88,60 +143,42 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    widget.module.imagePath,
-                    fit: BoxFit.cover,
-                  ),
+                child: const Icon(
+                  Icons.psychology_outlined,
+                  color: Colors.white,
+                  size: 32,
                 ),
               ),
               const SizedBox(width: 16),
+              // Module Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.module.title,
+                      widget.title,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${widget.module.lessons.length} lessons',
+                      '$totalLessons lessons',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 16,
                       ),
                     ),
                   ],
                 ),
               ),
-              Column(
-                children: [
-                  Text(
-                    '${(progressPercentage * 100).toInt()}%',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    '$completedCount/${widget.module.lessons.length}',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
+              // Progress Percentage
             ],
           ),
           const SizedBox(height: 16),
+          // Progress Bar
           Container(
             height: 8,
             decoration: BoxDecoration(
@@ -150,7 +187,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
             ),
             child: FractionallySizedBox(
               alignment: Alignment.centerLeft,
-              widthFactor: progressPercentage,
+              widthFactor: lessonProgress,
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -164,160 +201,192 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
     );
   }
 
-  Widget _buildLessonTile(Lesson lesson, int index) {
-    final isCompleted = isLessonCompleted(lesson.id);
-    final isLocked =
-        index > 0 && !isLessonCompleted(widget.module.lessons[index - 1].id);
+  Widget _buildLessonItem(dynamic lesson, int index) {
+    final isCompleted = completedLessons.contains(lesson.id);
+    final lessonNumber = index + 1;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1F2A),
+        color: const Color(0xFF2C2F36),
         borderRadius: BorderRadius.circular(12),
-        border:
-            isCompleted
-                ? Border.all(color: Colors.green.withOpacity(0.5), width: 1)
-                : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: isCompleted 
+            ? Border.all(color: const Color(0xFF4CAF50), width: 1.5)
+            : null,
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         leading: Container(
-          width: 40,
-          height: 40,
+          width: 50,
+          height: 50,
           decoration: BoxDecoration(
-            color:
-                isCompleted
-                    ? Colors.green
-                    : isLocked
-                    ? Colors.grey.shade600
-                    : Colors.orange.shade400,
-            borderRadius: BorderRadius.circular(20),
+            color: isCompleted 
+                ? const Color(0xFF4CAF50) 
+                : const Color(0xFF424242),
+            shape: BoxShape.circle,
           ),
           child: Icon(
-            isCompleted
-                ? Icons.check
-                : isLocked
-                ? Icons.lock
-                : Icons.play_arrow,
+            isCompleted ? Icons.check : Icons.play_arrow,
             color: Colors.white,
-            size: 20,
+            size: 24,
           ),
         ),
         title: Text(
           lesson.title,
-          style: TextStyle(
-            color: isLocked ? Colors.grey.shade400 : Colors.white,
-            fontSize: 16,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
-        subtitle: Text(
-          lesson.description ?? 'Tap to start learning',
-          style: TextStyle(
-            color: isLocked ? Colors.grey.shade600 : Colors.grey.shade400,
-            fontSize: 12,
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            'Lesson $lessonNumber',
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 14,
+            ),
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
-        trailing:
-            isCompleted
-                ? Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Completed',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                )
-                : isLocked
-                ? null
-                : const Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.grey,
-                  size: 16,
+        trailing: isCompleted
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-        onTap:
-            isLocked
-                ? null
-                : () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (_) => LessonContentPage(
-                            lesson: lesson,
-                            module: widget.module,
-                            uid: widget.uid,
-                            onComplete: () {
-                              loadProgress(); // Refresh progress when lesson is completed
-                            },
-                          ),
-                    ),
-                  );
+                child: const Text(
+                  'Completed',
+                  style: TextStyle(
+                    color: Color(0xFF4CAF50),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              )
+            : null,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LessonContentPage(
+                lesson: lesson,
+                module: currentModule!,
+                uid: FirebaseAuth.instance.currentUser!.uid,
+                onComplete: () {
+                  fetchQuizProgress();
                 },
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTakeQuizButton() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => QuizPage(moduleId: widget.moduleId),
+            ),
+          );
+          if (result == true) {
+            fetchQuizProgress();
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isModuleComplete ? Colors.green : const Color(0xFFFF9500),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 2,
+        ),
+        child: Text(
+          isModuleComplete ? 'Retake Quiz' : 'Take Quiz',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final module = currentModule;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E21),
+      backgroundColor: const Color(0xFF1A1D23),
       appBar: AppBar(
-        backgroundColor: Colors.orange.shade400,
+        backgroundColor: const Color(0xFFFF9500),
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, true),
         ),
         title: Text(
-          widget.module.title,
+          widget.title,
           style: const TextStyle(
-            color: Colors.white,
             fontWeight: FontWeight.bold,
+            fontSize: 20,
+            color: Colors.white,
           ),
         ),
       ),
-      body:
-          _isLoading
-              ? const Center(
-                child: CircularProgressIndicator(color: Colors.orange),
-              )
-              : Column(
-                children: [
-                  _buildProgressHeader(),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      itemCount: widget.module.lessons.length,
-                      itemBuilder: (context, index) {
-                        return _buildLessonTile(
-                          widget.module.lessons[index],
-                          index,
-                        );
-                      },
-                    ),
-                  ),
-                ],
+      body: loading
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFFFF9500),
+                strokeWidth: 3,
               ),
+            )
+          : SlideTransition(
+              position: _slideAnimation,
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: Column(
+                  children: [
+                    
+                    _buildModuleHeader(),
+                    
+                  
+                    Expanded(
+                      child: module != null && module.lessons.isNotEmpty
+                          ? ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: module.lessons.length,
+                              itemBuilder: (context, index) {
+                                return _buildLessonItem(module.lessons[index], index);
+                              },
+                            )
+                          : const Center(
+                              child: Text(
+                                'No lessons available',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                    ),
+                    
+                    
+                    _buildTakeQuizButton(),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 }
